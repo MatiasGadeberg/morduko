@@ -100,22 +100,22 @@ export function classifyBitmap(sample: Uint8Array): Classification | null {
   const holes = holeCount(sample, NORMAL_SIDE);
   let bestDigit = 0;
   let best = -1;
-  let second = -1;
+  let rival = -1;
   for (const template of templates) {
     let score = scorePair(sample, template.bits);
     const holeGap = Math.abs(holes - template.holes);
     if (holeGap === 1) score *= 0.93;
     else if (holeGap >= 2) score *= 0.78;
     if (score > best) {
-      second = best;
+      if (bestDigit !== template.digit) rival = best;
       best = score;
       bestDigit = template.digit;
-    } else if (score > second) {
-      second = score;
+    } else if (template.digit !== bestDigit && score > rival) {
+      rival = score;
     }
   }
-  if (best < 0) return null;
-  return { digit: bestDigit, score: best, margin: best - Math.max(0, second) };
+  if (best < 0 || bestDigit === 0) return null;
+  return { digit: bestDigit, score: best, margin: best - Math.max(0, rival) };
 }
 
 export type CellRead = {

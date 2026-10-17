@@ -1,14 +1,5 @@
 import { downscaleMax, rotateGray, type Gray } from "./image";
 
-export type LocatedGrid = {
-  /** Deskewed photo the cell coordinates refer to. */
-  image: Gray;
-  /** X positions of the 10 vertical grid lines. */
-  xs: number[];
-  /** Y positions of the 10 horizontal grid lines. */
-  ys: number[];
-};
-
 type Stat = { score: number; from: number; to: number };
 type Band = { pos: number; score: number; from: number; to: number };
 type Candidate = { lines: Band[]; penalty: number; strength: number; span: number };
@@ -242,7 +233,7 @@ function extentsAgree(lines: Band[]): boolean {
     const overlap = Math.min(line.to, to) - Math.max(line.from, from);
     if (overlap >= span * 0.55) hits++;
   }
-  return hits >= 8;
+  return hits >= 6;
 }
 
 function candidateSets(bands: Band[]): Candidate[] {
@@ -333,6 +324,90 @@ function choosePair(rows: Candidate[], cols: Candidate[]): { xs: number[]; ys: n
   return best ? { xs: best.xs, ys: best.ys } : null;
 }
 
+export type FittedLine = {
+  /** Coordinate where the line crosses `mid` on the other axis. */
+  intercept: number;
+  slope: number;
+  mid: number;
+};
+
+export type Point = { x: number; y: number };
+
+export type LocatedGrid = {
+  image: Gray;
+  /** Vertical lines, x at the grid's vertical midpoint. */
+  xs: number[];
+  /** Horizontal lines, y at the grid's horizontal midpoint. */
+  ys: number[];
+  vertical: FittedLine[];
+  horizontal: FittedLine[];
+};
+
+function fitVertical(dark: Uint8Array, gray: Gray, xApprox: number, y0: number, y1: number): FittedLine {
+  const mid = (y0 + y1) / 2;
+  const { w, h } = gray;
+  let best: FittedLine & { score: number } = { intercept: xApprox, slope: 0, mid, score: -1 };
+  for (let si = -10; si <= 10; si++) {
+    const slope = si * 0.012;
+    for (let shift = -8; shift <= 8; shift++) {
+      const intercept = xApprox + shift;
+      let score = 0;
+      for (let y = Math.round(y0); y <= y1; y++) {
+        const x = Math.round(intercept + slope * (y - mid));
+        if (y < 0 || y >= h || x < 1 || x >= w - 1) continue;
+        const i = y * w + x;
+        if (dark[i]) score += 2;
+        if (dark[i - 1]) score += 1;
+        if (dark[i + 1]) score += 1;
+      }
+      if (score > best.score) best = { intercept, slope, mid, score };
+    }
+  }
+  return { intercept: best.intercept, slope: best.slope, mid };
+}
+
+function fitHorizontal(dark: Uint8Array, gray: Gray, yApprox: number, x0: number, x1: number): FittedLine {
+  const mid = (x0 + x1) / 2;
+  const { w, h } = gray;
+  let best: FittedLine & { score: number } = { intercept: yApprox, slope: 0, mid, score: -1 };
+  for (let si = -10; si <= 10; si++) {
+    const slope = si * 0.012;
+    for (let shift = -8; shift <= 8; shift++) {
+      const intercept = yApprox + shift;
+      let score = 0;
+      for (let x = Math.round(x0); x <= x1; x++) {
+        const y = Math.round(intercept + slope * (x - mid));
+        if (x < 0 || x >= w || y < 1 || y >= h - 1) continue;
+        const i = y * w + x;
+        if (dark[i]) score += 2;
+        if (dark[i - w]) score += 1;
+        if (dark[i + w]) score += 1;
+      }
+      if (score > best.score) best = { intercept, slope, mid, score };
+    }
+  }
+  return { intercept: best.intercept, slope: best.slope, mid };
+}
+
+function cross(horizontal: FittedLine, vertical: FittedLine): Point {
+  const denom = 1 - vertical.slope * horizontal.slope;
+  const x =
+    (vertical.intercept + vertical.slope * (horizontal.intercept - vertical.mid - horizontal.slope * horizontal.mid)) /
+    (Math.abs(denom) < 1e-4 ? 1 : denom);
+  const y = horizontal.intercept + horizontal.slope * (x - horizontal.mid);
+  return { x, y };
+}
+
+/** Corners of one cell, clockwise from the top left. */
+export function cellQuad(grid: LocatedGrid, row: number, col: number): [Point, Point, Point, Point] {
+  return [
+    cross(grid.horizontal[row], grid.vertical[col]),
+    cross(grid.horizontal[row], grid.vertical[col + 1]),
+    cross(grid.horizontal[row + 1], grid.vertical[col + 1]),
+    cross(grid.horizontal[row + 1], grid.vertical[col]),
+  ];
+}
+
 export function locateGrid(original: Gray): LocatedGrid | null {
   if (original.w < 40 || original.h < 40) return null;
   const angle = bestAngle(original);
@@ -347,7 +422,16 @@ export function locateGrid(original: Gray): LocatedGrid | null {
     const colBands = extractBands(cols, rel, minSep);
     if (rowBands.length < 10 || colBands.length < 10) continue;
     const pair = choosePair(candidateSets(rowBands), candidateSets(colBands));
-    if (pair) return { image, xs: pair.xs, ys: pair.ys };
+    if (!pair) continue;
+    const vertical = pair.xs.map((x) => fitVertical(dark, image, x, pair.ys[0], pair.ys[9]));
+    const horizontal = pair.ys.map((y) => fitHorizontal(dark, image, y, pair.xs[0], pair.xs[9]));
+    return {
+      image,
+      xs: vertical.map((line) => line.intercept),
+      ys: horizontal.map((line) => line.intercept),
+      vertical,
+      horizontal,
+    };
   }
   return null;
 }

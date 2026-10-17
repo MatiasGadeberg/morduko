@@ -42,13 +42,14 @@ describe("newspaper scan", () => {
     expect(report.found).toBe(report.givens);
   });
 
-  it("reads a tilted photo with margin and other text, leaving unsure cells blank", () => {
+  it("reads a tilted skewed page with margin and text, and does not invent digits", () => {
     const result = readFixture("puzzle-tilted.png");
     expect(result.ok, !result.ok ? result.message : "").toBe(true);
     if (!result.ok) return;
     const report = compare(result.givens, classic.givens);
+    // A wrong digit fails the puzzle. An unsure cell must stay blank instead.
     expect(report.wrong, format(result.givens)).toEqual([]);
-    expect(report.found).toBeGreaterThanOrEqual(Math.ceil(report.givens * 0.9));
+    expect(report.found).toBe(report.givens);
   });
 
   it("fails gently when the photo has no grid", () => {

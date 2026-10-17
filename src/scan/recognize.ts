@@ -1,6 +1,6 @@
 import { readCell } from "./digits";
-import { locateGrid } from "./grid";
-import { downscaleMax, rgbaToGray, sampleRect } from "./image";
+import { cellQuad, locateGrid, type Point } from "./grid";
+import { downscaleMax, rgbaToGray, sampleQuad } from "./image";
 
 export type ScanSuccess = {
   ok: true;
@@ -19,7 +19,16 @@ export const NO_GRID_MESSAGE =
   "I couldn't find a Sudoku grid in that photo. Try again with the whole puzzle in the picture, on a flat page.";
 
 const CELL = 64;
-const INSET = 0.13;
+const INSET = 0.14;
+
+function insetQuad(quad: [Point, Point, Point, Point], amount: number): [Point, Point, Point, Point] {
+  const cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
+  const cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+  return quad.map((point) => ({
+    x: point.x + (cx - point.x) * amount,
+    y: point.y + (cy - point.y) * amount,
+  })) as [Point, Point, Point, Point];
+}
 
 export function recognizeRgba(data: ArrayLike<number>, w: number, h: number): ScanResult {
   try {
@@ -31,13 +40,8 @@ export function recognizeRgba(data: ArrayLike<number>, w: number, h: number): Sc
     const uncertain = Array.from({ length: 81 }, () => false);
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
-        const x0 = located.xs[col];
-        const x1 = located.xs[col + 1];
-        const y0 = located.ys[row];
-        const y1 = located.ys[row + 1];
-        const padX = (x1 - x0) * INSET;
-        const padY = (y1 - y0) * INSET;
-        const patch = sampleRect(located.image, x0 + padX, y0 + padY, x1 - padX, y1 - padY, CELL);
+        const [tl, tr, br, bl] = insetQuad(cellQuad(located, row, col), INSET);
+        const patch = sampleQuad(located.image, tl, tr, br, bl, CELL);
         const read = readCell(patch);
         const index = row * 9 + col;
         givens[index] = read.digit;

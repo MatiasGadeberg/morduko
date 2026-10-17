@@ -122,17 +122,29 @@ export function rotateGray(src: Gray, angle: number, mode: "near" | "linear" = "
   return { w, h, px, mask };
 }
 
-export function sampleRect(src: Gray, x0: number, y0: number, x1: number, y1: number, size: number): Gray {
+export function sampleQuad(
+  src: Gray,
+  tl: { x: number; y: number },
+  tr: { x: number; y: number },
+  br: { x: number; y: number },
+  bl: { x: number; y: number },
+  size: number,
+): Gray {
   const px = new Float32Array(size * size);
   px.fill(1);
-  const width = x1 - x0;
-  const height = y1 - y0;
   for (let y = 0; y < size; y++) {
-    const gy = y0 + ((y + 0.5) / size) * height;
+    const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
-      const gx = x0 + ((x + 0.5) / size) * width;
+      const u = (x + 0.5) / size;
+      const topX = tl.x * (1 - u) + tr.x * u;
+      const topY = tl.y * (1 - u) + tr.y * u;
+      const botX = bl.x * (1 - u) + br.x * u;
+      const botY = bl.y * (1 - u) + br.y * u;
+      const gx = topX * (1 - v) + botX * v;
+      const gy = topY * (1 - v) + botY * v;
       px[y * size + x] = sampleBilinear(src, gx, gy).v;
     }
   }
   return { w: size, h: size, px };
 }
+
