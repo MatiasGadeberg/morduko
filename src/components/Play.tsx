@@ -1,5 +1,5 @@
 import { Board } from "./Board";
-import { Keypad } from "./Keypad";
+import { Controls } from "./Controls";
 
 type PlayProps = {
   givens: number[];
@@ -12,9 +12,9 @@ type PlayProps = {
   checkNote: string | null;
   onSelect: (index: number | null) => void;
   onDigit: (digit: number) => void;
-  onClear: () => void;
+  onErase: () => void;
   onUndo: () => void;
-  onToggleNotes: () => void;
+  onNotes: () => void;
   onCheck: () => void;
   onHome: () => void;
   onFinish: () => void;
@@ -32,9 +32,9 @@ export function Play(props: PlayProps) {
     checkNote,
     onSelect,
     onDigit,
-    onClear,
+    onErase,
     onUndo,
-    onToggleNotes,
+    onNotes,
     onCheck,
     onHome,
     onFinish,
@@ -54,11 +54,11 @@ export function Play(props: PlayProps) {
           <p>The puzzle is complete.</p>
         </div>
       ) : checkNote ? (
-        <p className={`status ${wrong?.some(Boolean) ? "warn" : "ok"}`} role="status">
+        <p className={`status ${wrong?.some(Boolean) ? "warn" : "quiet"}`} role="status">
           {checkNote}
         </p>
       ) : (
-        <p className="help">Printed numbers stay put. Yours are in blue.</p>
+        <p className="help slim">Your numbers are blue.</p>
       )}
       <div className="play-layout">
         <div className="board-wrap">
@@ -73,32 +73,18 @@ export function Play(props: PlayProps) {
           />
         </div>
         {solved ? (
-          <div className="side">
-            <button type="button" className="btn primary" onClick={onFinish}>
-              Back to start
-            </button>
-          </div>
+          <button type="button" className="btn primary compact" onClick={onFinish}>
+            Back to start
+          </button>
         ) : (
-          <div className="side">
-            <Keypad onDigit={onDigit} onClear={onClear} notesMode={notesMode} />
-            <div className="actions">
-              <button type="button" className="btn secondary" onClick={onUndo}>
-                Undo
-              </button>
-              <button
-                type="button"
-                className={`btn secondary notes-toggle ${notesMode ? "on" : ""}`}
-                aria-pressed={notesMode}
-                onClick={onToggleNotes}
-              >
-                Notes
-              </button>
-              <button type="button" className="btn primary check" onClick={onCheck}>
-                Check
-              </button>
-            </div>
-            {notesMode ? <p className="help">Notes are on. Tap a number to pencil it in.</p> : null}
-          </div>
+          <Controls
+            notesMode={notesMode}
+            onDigit={onDigit}
+            onErase={onErase}
+            onUndo={onUndo}
+            onNotes={onNotes}
+            onCheck={onCheck}
+          />
         )}
       </div>
     </main>

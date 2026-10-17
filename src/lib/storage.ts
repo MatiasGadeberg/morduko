@@ -6,6 +6,8 @@ export type UndoSnap = {
   index: number;
   entry: number;
   notes: number;
+  given?: number;
+  uncertain?: boolean;
 };
 
 export type SavedPuzzle = {
@@ -56,15 +58,15 @@ export function loadPuzzle(): SavedPuzzle | null {
     const wrong = data.wrong == null ? null : isBoolGrid(data.wrong) ? data.wrong : null;
     const undo = Array.isArray(data.undo)
       ? data.undo
-          .filter(
-            (step): step is UndoSnap =>
-              !!step &&
-              typeof step.index === "number" &&
-              step.index >= 0 &&
-              step.index < 81 &&
-              typeof step.entry === "number" &&
-              typeof step.notes === "number",
-          )
+          .filter((step): step is UndoSnap => {
+            if (!step || typeof step !== "object") return false;
+            const snap = step as UndoSnap;
+            if (typeof snap.index !== "number" || snap.index < 0 || snap.index >= 81) return false;
+            if (typeof snap.entry !== "number" || typeof snap.notes !== "number") return false;
+            if (snap.given != null && (typeof snap.given !== "number" || snap.given < 0 || snap.given > 9)) return false;
+            if (snap.uncertain != null && typeof snap.uncertain !== "boolean") return false;
+            return true;
+          })
           .slice(-80)
       : [];
     const selected = typeof data.selected === "number" && data.selected >= 0 && data.selected < 81 ? data.selected : null;

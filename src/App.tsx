@@ -61,18 +61,35 @@ function moveSelection(selected: number | null, key: string): number {
   return ((row + 1) % 9) * 9 + col;
 }
 
+function remember(puzzle: Puzzle, index: number, phase: Phase): UndoSnap[] {
+  const snap: UndoSnap = { index, entry: puzzle.entries[index], notes: puzzle.notes[index] };
+  if (phase === "review") {
+    snap.given = puzzle.givens[index];
+    snap.uncertain = puzzle.uncertain[index];
+  }
+  return [...puzzle.undo, snap].slice(-80);
+}
+
 function applyDigit(puzzle: Puzzle, phase: Phase, digit: number): Puzzle | null {
   if (puzzle.selected == null) return null;
   const index = puzzle.selected;
   if (phase === "review") {
+    const undo = remember(puzzle, index, phase);
     const givens = puzzle.givens.slice();
+    const notes = puzzle.notes.slice();
     const uncertain = puzzle.uncertain.slice();
-    givens[index] = digit;
     uncertain[index] = false;
-    return { ...puzzle, givens, uncertain };
+    if (puzzle.notesMode) {
+      givens[index] = 0;
+      notes[index] = notes[index] ^ (1 << digit);
+    } else {
+      givens[index] = digit;
+      notes[index] = 0;
+    }
+    return { ...puzzle, givens, notes, uncertain, undo };
   }
   if (puzzle.solved || puzzle.givens[index]) return null;
-  const undo = [...puzzle.undo, { index, entry: puzzle.entries[index], notes: puzzle.notes[index] }].slice(-80);
+  const undo = remember(puzzle, index, phase);
   const entries = puzzle.entries.slice();
   const notes = puzzle.notes.slice();
   if (puzzle.notesMode) {
@@ -91,14 +108,17 @@ function applyClear(puzzle: Puzzle, phase: Phase): Puzzle | null {
   if (puzzle.selected == null) return null;
   const index = puzzle.selected;
   if (phase === "review") {
+    const undo = remember(puzzle, index, phase);
     const givens = puzzle.givens.slice();
+    const notes = puzzle.notes.slice();
     const uncertain = puzzle.uncertain.slice();
     givens[index] = 0;
+    notes[index] = 0;
     uncertain[index] = false;
-    return { ...puzzle, givens, uncertain };
+    return { ...puzzle, givens, notes, uncertain, undo };
   }
   if (puzzle.solved || puzzle.givens[index]) return null;
-  const undo = [...puzzle.undo, { index, entry: puzzle.entries[index], notes: puzzle.notes[index] }].slice(-80);
+  const undo = remember(puzzle, index, phase);
   const entries = puzzle.entries.slice();
   const notes = puzzle.notes.slice();
   entries[index] = 0;
@@ -248,7 +268,7 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className={phase === "review" || phase === "play" ? "app board-app" : "app"}>
       <input
         ref={cameraRef}
         className="file"
@@ -291,11 +311,16 @@ export function App() {
       {phase === "review" && puzzle ? (
         <Review
           givens={puzzle.givens}
+          notes={puzzle.notes}
           uncertain={puzzle.uncertain}
           selected={puzzle.selected}
+          notesMode={puzzle.notesMode}
           onSelect={(index) => setPuzzle((prev) => (prev ? { ...prev, selected: index } : prev))}
           onDigit={(digit) => setPuzzle((prev) => (prev ? applyDigit(prev, "review", digit) ?? prev : prev))}
-          onClear={() => setPuzzle((prev) => (prev ? applyClear(prev, "review") ?? prev : prev))}
+          onErase={() => setPuzzle((prev) => (prev ? applyClear(prev, "review") ?? prev : prev))}
+          onUndo={() => setPuzzle((prev) => undoPuzzle(prev))}
+          onNotes={() => setPuzzle((prev) => (prev ? { ...prev, notesMode: !prev.notesMode } : prev))}
+          onCheck={() => undefined}
           onHome={goHome}
           onStart={startPlay}
         />
@@ -312,9 +337,9 @@ export function App() {
           checkNote={puzzle.checkNote}
           onSelect={(index) => setPuzzle((prev) => (prev ? { ...prev, selected: index } : prev))}
           onDigit={(digit) => setPuzzle((prev) => (prev ? applyDigit(prev, "play", digit) ?? prev : prev))}
-          onClear={() => setPuzzle((prev) => (prev ? applyClear(prev, "play") ?? prev : prev))}
+          onErase={() => setPuzzle((prev) => (prev ? applyClear(prev, "play") ?? prev : prev))}
           onUndo={() => setPuzzle((prev) => undoPuzzle(prev))}
-          onToggleNotes={() => setPuzzle((prev) => (prev ? { ...prev, notesMode: !prev.notesMode } : prev))}
+          onNotes={() => setPuzzle((prev) => (prev ? { ...prev, notesMode: !prev.notesMode } : prev))}
           onCheck={check}
           onHome={goHome}
           onFinish={finish}
@@ -331,9 +356,13 @@ function undoPuzzle(puzzle: Puzzle | null): Puzzle | null {
   if (!snap) return puzzle;
   const entries = puzzle.entries.slice();
   const notes = puzzle.notes.slice();
+  const givens = puzzle.givens.slice();
+  const uncertain = puzzle.uncertain.slice();
   entries[snap.index] = snap.entry;
   notes[snap.index] = snap.notes;
+  if (typeof snap.given === "number") givens[snap.index] = snap.given;
+  if (typeof snap.uncertain === "boolean") uncertain[snap.index] = snap.uncertain;
   const wrong = puzzle.wrong?.slice() ?? null;
   if (wrong) wrong[snap.index] = false;
-  return { ...puzzle, entries, notes, undo, wrong, selected: snap.index, checkNote: null };
+  return { ...puzzle, givens, entries, notes, uncertain, undo, wrong, selected: snap.index, checkNote: null };
 }

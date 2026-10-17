@@ -1,20 +1,39 @@
 import { useMemo } from "react";
 import { analyze } from "../lib/sudoku";
 import { Board } from "./Board";
-import { Keypad } from "./Keypad";
+import { Controls } from "./Controls";
 
 type ReviewProps = {
   givens: number[];
+  notes: number[];
   uncertain: boolean[];
   selected: number | null;
+  notesMode: boolean;
   onSelect: (index: number | null) => void;
   onDigit: (digit: number) => void;
-  onClear: () => void;
+  onErase: () => void;
+  onUndo: () => void;
+  onNotes: () => void;
+  onCheck: () => void;
   onHome: () => void;
   onStart: () => void;
 };
 
-export function Review({ givens, uncertain, selected, onSelect, onDigit, onClear, onHome, onStart }: ReviewProps) {
+export function Review({
+  givens,
+  notes,
+  uncertain,
+  selected,
+  notesMode,
+  onSelect,
+  onDigit,
+  onErase,
+  onUndo,
+  onNotes,
+  onCheck,
+  onHome,
+  onStart,
+}: ReviewProps) {
   const signature = givens.join("");
   const status = useMemo(() => {
     const result = analyze(givens, 2);
@@ -22,17 +41,17 @@ export function Review({ givens, uncertain, selected, onSelect, onDigit, onClear
       return {
         ready: false,
         tone: "warn" as const,
-        message: "These numbers don't make a puzzle. Look for a digit that doesn't belong.",
+        message: "These numbers don't make a puzzle. Change a digit that doesn't belong.",
       };
     }
     if (result.count > 1) {
       return {
         ready: false,
         tone: "warn" as const,
-        message: "More than one puzzle fits these numbers. Fill a blank cell, or correct a digit that looks wrong.",
+        message: "More than one puzzle fits. Fill a blank, or fix a digit.",
       };
     }
-    return { ready: true, tone: "ok" as const, message: "This is one puzzle." };
+    return { ready: true, tone: "quiet" as const, message: "This is one puzzle." };
   }, [signature, givens]);
 
   const unsure = uncertain.some(Boolean);
@@ -45,23 +64,34 @@ export function Review({ givens, uncertain, selected, onSelect, onDigit, onClear
           Home
         </button>
       </header>
-      <p className="help">
-        Tap a cell, then tap a number to fix it. A wrong printed number spoils the puzzle, so take a moment.
+      <p className="help slim">Tap a cell to change a number.</p>
+      {unsure ? <p className="help slim mark">Marked cells were hard to read.</p> : null}
+      <p className={`status ${status.tone}`} role="status">
+        {status.message}
       </p>
-      {unsure ? <p className="help mark">Highlighted cells were hard to read. Leave them blank if no number was printed.</p> : null}
       <div className="play-layout">
         <div className="board-wrap">
-          <Board givens={givens} uncertain={uncertain} selected={selected} onSelect={onSelect} />
+          <Board
+            givens={givens}
+            notes={notes}
+            uncertain={uncertain}
+            selected={selected}
+            onSelect={onSelect}
+          />
         </div>
-        <div className="side">
-          <p className={`status ${status.tone}`} role="status">
-            {status.message}
-          </p>
-          <Keypad onDigit={onDigit} onClear={onClear} />
-          <button type="button" className="btn primary" disabled={!status.ready} onClick={onStart}>
-            This looks right
-          </button>
-        </div>
+        <Controls
+          notesMode={notesMode}
+          onDigit={onDigit}
+          onErase={onErase}
+          onUndo={onUndo}
+          onNotes={onNotes}
+          onCheck={onCheck}
+          extra={
+            <button type="button" className="btn primary compact" disabled={!status.ready} onClick={onStart}>
+              This looks right
+            </button>
+          }
+        />
       </div>
     </main>
   );
